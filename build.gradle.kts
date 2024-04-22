@@ -16,6 +16,7 @@ repositories {
 dependencies {
     implementation("org.agrona:agrona:1.21.1")
     implementation("io.github.metarank:lightgbm4j:4.1.0-2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
