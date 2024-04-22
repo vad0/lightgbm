@@ -1,12 +1,15 @@
 plugins {
     id("java")
     id("me.champeau.jmh") version "0.7.2"
+    id("checkstyle")
+    id("maven-publish")
 }
 
 group = "vad0"
 version = "1.0-SNAPSHOT"
 
 repositories {
+    mavenLocal()
     mavenCentral()
 }
 
@@ -29,7 +32,7 @@ tasks.test {
 
 jmh {
     jvmArgs.add("-Djmh.ignoreLock=true")
-//    includes.set(listOf("Write*"))
+    includes.set(listOf(".Unsafe"))
     fork = 1
     warmupIterations = 3
     iterations = 5
@@ -38,9 +41,29 @@ jmh {
     timeUnit = "us"
     failOnError = true
     duplicateClassesStrategy = DuplicatesStrategy.INCLUDE
-    profilers.set(listOf("async:libPath=/home/vadim/Documents/soft/async-profiler-3.0-linux-x64/lib/libasyncProfiler.so;output=flamegraph;dir=profile-results"))
+    val argsMap = mapOf(
+        "libPath" to "/home/vadim/Documents/soft/async-profiler-3.0-linux-x64/lib/libasyncProfiler.so",
+        "output" to "flamegraph",
+        "dir" to "build"
+    )
+    val argsString = argsMap.entries
+        .map { it.key + "=" + it.value }
+        .joinToString(";")
+    print(argsString)
+    profilers.set(listOf("async:$argsString"))
 }
 
-//jmhJar {
-//    duplicatesStrategy(DuplicatesStrategy.INCLUDE)
-//}
+publishing {
+    publications {
+        // This mavenJava can be filled in randomly, it's just a task name
+        // MavenPublication must have, this is the task class to call
+        create<MavenPublication>("maven") {
+            // The header here is the artifacts configuration information, do not fill in the default
+            groupId = "gfjson"
+            artifactId = "library"
+            version = "1.1"
+
+            from(components["java"])
+        }
+    }
+}
