@@ -20,7 +20,7 @@ public class Booster
     static {
         try {
             loadNative();
-        } catch (IOException var1) {
+        } catch (IOException exception) {
             LOGGER.info("Cannot load native library for your platform");
         }
     }
@@ -29,14 +29,12 @@ public class Booster
     private final MyDoublePointer outputBuffer;
     private final SWIGTYPE_p_void handlePtr;
     private final SWIGTYPE_p_void dataVoidPtr;
-    private final SWIGTYPE_p_p_void out_fastConfig = lightgbmlib.voidpp_handle();
     private final UnsafeBuffer inBuffer;
     private final UnsafeBuffer outBuffer;
     private final int iterations;
     private final SWIGTYPE_p_p_void handle;
-    private final int features;
     private final SWIGTYPE_p_double inputBuffer;
-    private SWIGTYPE_p_void fastConfigHandle;
+    private final SWIGTYPE_p_void fastConfigHandle;
 
     private volatile boolean isClosed = false;
 
@@ -44,7 +42,6 @@ public class Booster
         assert features > 0 : features;
         this.iterations = iterations;
         this.handle = handle;
-        this.features = features;
         inputBuffer = lightgbmlib.new_doubleArray(features);
         handlePtr = lightgbmlib.voidpp_value(handle);
         dataVoidPtr = lightgbmlib.double_to_voidp_ptr(inputBuffer);
@@ -52,6 +49,20 @@ public class Booster
         long outAddress = lightgbmlibJNI.new_doubleArray(1);
         outputBuffer = new MyDoublePointer(outAddress);
         outBuffer = new UnsafeBuffer(outAddress, Double.BYTES);
+        var outFastConfig = lightgbmlib.voidpp_handle();
+        int result = lightgbmlib.LGBM_BoosterPredictForMatSingleRowFastInit(
+            handlePtr,
+            PredictionType.C_API_PREDICT_NORMAL.getType(),
+            0,
+            iterations,
+            lightgbmlib.C_API_DTYPE_FLOAT64,
+            features,
+            "",
+            outFastConfig);
+        if (result < 0) {
+            throw new RuntimeException(lightgbmlib.LGBM_GetLastError());
+        }
+        fastConfigHandle = lightgbmlib.voidpp_value(outFastConfig);
     }
 
     public static synchronized void loadNative() throws IOException {
@@ -218,26 +229,26 @@ public class Booster
         LOGGER.info("Copied " + bytesCopied + " bytes");
     }
 
-    public static Booster createFromModelFile(String file, int features) throws LGBMException {
+    public static Booster createFromModelFile(String file, int features) {
         SWIGTYPE_p_p_void handle = lightgbmlib.new_voidpp();
         SWIGTYPE_p_int outIterations = lightgbmlib.new_intp();
         int result = lightgbmlib.LGBM_BoosterCreateFromModelfile(file, outIterations, handle);
         if (result < 0) {
-            throw new LGBMException(lightgbmlib.LGBM_GetLastError());
-        } else {
-            int iterations = lightgbmlib.intp_value(outIterations);
-            lightgbmlib.delete_intp(outIterations);
-            return new Booster(iterations, handle, features);
+            throw new RuntimeException(lightgbmlib.LGBM_GetLastError());
         }
+        int iterations = lightgbmlib.intp_value(outIterations);
+        lightgbmlib.delete_intp(outIterations);
+        return new Booster(iterations, handle, features);
     }
 
-    public void close() throws LGBMException {
-        if (!this.isClosed) {
-            this.isClosed = true;
-            int result = lightgbmlib.LGBM_BoosterFree(lightgbmlib.voidpp_value(this.handle));
-            if (result < 0) {
-                throw new LGBMException(lightgbmlib.LGBM_GetLastError());
-            }
+    public void close() {
+        if (isClosed) {
+            return;
+        }
+        isClosed = true;
+        int result = lightgbmlib.LGBM_BoosterFree(lightgbmlib.voidpp_value(handle));
+        if (result < 0) {
+            throw new RuntimeException(lightgbmlib.LGBM_GetLastError());
         }
     }
 
@@ -328,22 +339,6 @@ public class Booster
         } else {
             return lightgbmlib.doubleArray_getitem(outputBuffer, 0);
         }
-    }
-
-    public void preparePredict() {
-        int result = lightgbmlib.LGBM_BoosterPredictForMatSingleRowFastInit(
-            handlePtr,
-            lightgbmlib.C_API_DTYPE_FLOAT64,
-            0,
-            iterations,
-            PredictionType.C_API_PREDICT_NORMAL.getType(),
-            features,
-            "",
-            out_fastConfig);
-        if (result < 0) {
-            throw new RuntimeException(lightgbmlib.LGBM_GetLastError());
-        }
-        fastConfigHandle = lightgbmlib.voidpp_value(out_fastConfig);
     }
 
     public double predictForMatSingleRowFast(double[] data) {

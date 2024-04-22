@@ -12,13 +12,12 @@ import java.util.concurrent.TimeUnit;
 public class LightGbmBenchmark {
     private final LGBMBooster lgbmBooster;
     private final Booster booster;
-    private final double[] input = new double[15];
+    private final double[] input = new double[Main.FEATURES];
 
     public LightGbmBenchmark() {
         try {
             this.lgbmBooster = LGBMBooster.createFromModelfile(Main.PATH);
             this.booster = Booster.createFromModelFile(Main.PATH, Main.FEATURES);
-            booster.preparePredict();
         } catch (LGBMException e) {
             throw new RuntimeException(e);
         }
@@ -27,7 +26,7 @@ public class LightGbmBenchmark {
     @Benchmark
     @BenchmarkMode(Mode.AverageTime)
     @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public double[] predictDefault() throws LGBMException {
+    public double[] predictDefault() {
         return Main.predictDefault(lgbmBooster, input);
     }
 
@@ -41,7 +40,7 @@ public class LightGbmBenchmark {
     @Benchmark
     @BenchmarkMode(Mode.AverageTime)
     @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public double predictSingleRow() throws LGBMException {
+    public double predictSingleRow() {
         return Main.predictSingleRow(lgbmBooster, input);
     }
 

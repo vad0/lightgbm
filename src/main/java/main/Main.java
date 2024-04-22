@@ -14,7 +14,6 @@ public class Main {
         try (var booster = Booster.createFromModelFile(PATH, FEATURES)) {
             double[] input = new double[FEATURES];
 
-            booster.preparePredict();
             double pred3 = booster.predictForMatSingleRowFast(input);
             System.out.println(pred3);
 
@@ -29,22 +28,30 @@ public class Main {
         System.out.println("Hello world!");
     }
 
-    public static double[] predictDefault(LGBMBooster booster, double[] input) throws LGBMException {
-        return booster.predictForMat(input, 1, input.length, true, PredictionType.C_API_PREDICT_NORMAL);
+    public static double[] predictDefault(LGBMBooster booster, double[] input) {
+        try {
+            return booster.predictForMat(input, 1, input.length, true, PredictionType.C_API_PREDICT_NORMAL);
+        } catch (LGBMException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static double[] predictSingleThread(Booster booster, double[] input) throws LGBMException {
         return booster.predictForMat(
-                input,
-                1,
-                input.length,
-                true,
-                PredictionType.C_API_PREDICT_NORMAL,
-                "num_threads=1 device=cpu");
+            input,
+            1,
+            input.length,
+            true,
+            PredictionType.C_API_PREDICT_NORMAL,
+            "num_threads=1 device=cpu");
     }
 
-    public static double predictSingleRow(LGBMBooster booster, double[] input) throws LGBMException {
-        return booster.predictForMatSingleRow(input, PredictionType.C_API_PREDICT_NORMAL);
+    public static double predictSingleRow(LGBMBooster booster, double[] input) {
+        try {
+            return booster.predictForMatSingleRow(input, PredictionType.C_API_PREDICT_NORMAL);
+        } catch (LGBMException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static double predictNoAllocation(Booster booster, double[] input) throws LGBMException {

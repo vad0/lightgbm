@@ -32,7 +32,7 @@ tasks.test {
 
 jmh {
     jvmArgs.add("-Djmh.ignoreLock=true")
-    includes.set(listOf(".Unsafe"))
+//    includes.set(listOf(".Unsafe"))
     fork = 1
     warmupIterations = 3
     iterations = 5
