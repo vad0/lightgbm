@@ -12,12 +12,13 @@ import java.util.concurrent.TimeUnit;
 public class LightGbmBenchmark {
     private final LGBMBooster lgbmBooster;
     private final Booster booster;
-    private final double[] input = new double[Main.FEATURES];
+    private final double[] input;
 
     public LightGbmBenchmark() {
         try {
-            this.lgbmBooster = LGBMBooster.createFromModelfile(Main.PATH);
-            this.booster = Booster.createFromModelFile(Main.PATH, Main.FEATURES);
+            lgbmBooster = LGBMBooster.createFromModelfile(Main.PATH);
+            booster = Booster.createFromModelFile(Main.PATH);
+            input = new double[booster.numFeatures()];
         } catch (LGBMException e) {
             throw new RuntimeException(e);
         }
@@ -33,13 +34,6 @@ public class LightGbmBenchmark {
     @Benchmark
     @BenchmarkMode(Mode.AverageTime)
     @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public double[] predictSingleThread() throws LGBMException {
-        return Main.predictSingleThread(booster, input);
-    }
-
-    @Benchmark
-    @BenchmarkMode(Mode.AverageTime)
-    @OutputTimeUnit(TimeUnit.NANOSECONDS)
     public double predictSingleRow() {
         return Main.predictSingleRow(lgbmBooster, input);
     }
@@ -47,21 +41,7 @@ public class LightGbmBenchmark {
     @Benchmark
     @BenchmarkMode(Mode.AverageTime)
     @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public double predictSingleRowNoAllocation() throws LGBMException {
-        return Main.predictNoAllocation(booster, input);
-    }
-
-    @Benchmark
-    @BenchmarkMode(Mode.AverageTime)
-    @OutputTimeUnit(TimeUnit.NANOSECONDS)
-    public double predictSingleRowFast() {
-        return booster.predictForMatSingleRowFast(input);
-    }
-
-    @Benchmark
-    @BenchmarkMode(Mode.AverageTime)
-    @OutputTimeUnit(TimeUnit.NANOSECONDS)
     public double predictSingleRowUnsafe() {
-        return booster.predictForMatSingleRowUnsafe(input);
+        return booster.predict(input);
     }
 }
