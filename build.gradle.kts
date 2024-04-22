@@ -3,6 +3,7 @@ plugins {
     id("me.champeau.jmh") version "0.7.2"
     id("checkstyle")
     id("maven-publish")
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "vad0"
@@ -15,6 +16,8 @@ repositories {
 
 dependencies {
     implementation("org.agrona:agrona:1.21.1")
+    implementation("org.apache.logging.log4j:log4j-core:3.0.0-beta1")
+    implementation("org.apache.logging.log4j:log4j-slf4j-impl:3.0.0-beta2")
     implementation("io.github.metarank:lightgbm4j:4.1.0-2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
@@ -50,7 +53,6 @@ jmh {
     val argsString = argsMap.entries
         .map { it.key + "=" + it.value }
         .joinToString(";")
-    print(argsString)
     profilers.set(listOf("async:$argsString"))
 }
 

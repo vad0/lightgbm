@@ -1,10 +1,9 @@
 package main;
 
 import com.microsoft.ml.lightgbm.*;
-import io.github.metarank.lightgbm4j.LGBMException;
 import org.agrona.concurrent.UnsafeBuffer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -12,9 +11,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
 
+import static java.util.Objects.requireNonNull;
+
 public class Booster
     implements AutoCloseable {
-    private static final Logger LOGGER = LoggerFactory.getLogger(Booster.class);
+    private static final Logger LOGGER = LogManager.getLogger(Booster.class);
     private static volatile boolean nativeLoaded = false;
 
     static {
@@ -27,23 +28,20 @@ public class Booster
 
     private final SWIGTYPE_p_long_long outLength = lightgbmlib.new_int64_tp();
     private final MyDoublePointer outputBuffer;
-    private final SWIGTYPE_p_void handlePtr;
     private final SWIGTYPE_p_void dataVoidPtr;
     private final UnsafeBuffer inBuffer;
     private final UnsafeBuffer outBuffer;
-    private final int iterations;
     private final SWIGTYPE_p_p_void handle;
-    private final SWIGTYPE_p_double inputBuffer;
     private final SWIGTYPE_p_void fastConfigHandle;
 
     private volatile boolean isClosed = false;
 
-    Booster(int iterations, SWIGTYPE_p_p_void handle, int features) {
-        assert features > 0 : features;
-        this.iterations = iterations;
+    Booster(int iterations, SWIGTYPE_p_p_void handle) {
         this.handle = handle;
-        inputBuffer = lightgbmlib.new_doubleArray(features);
-        handlePtr = lightgbmlib.voidpp_value(handle);
+        int features = numFeatures();
+        assert features > 0 : features;
+        SWIGTYPE_p_double inputBuffer = lightgbmlib.new_doubleArray(features);
+        SWIGTYPE_p_void handlePtr = lightgbmlib.voidpp_value(handle);
         dataVoidPtr = lightgbmlib.double_to_voidp_ptr(inputBuffer);
         inBuffer = new UnsafeBuffer(SWIGTYPE_p_void.getCPtr(dataVoidPtr), features * Double.BYTES);
         long outAddress = lightgbmlibJNI.new_doubleArray(1);
@@ -182,14 +180,14 @@ public class Booster
 
     private static void extractResource(String path, String name, File dest) throws IOException {
         LOGGER.info("Extracting native lib {}", dest);
-        InputStream libStream = Booster.class.getClassLoader().getResourceAsStream(path);
-        ByteArrayOutputStream libByteStream = new ByteArrayOutputStream();
-        copyStream(libStream, libByteStream);
-        libStream.close();
-        InputStream md5Stream = Booster.class.getClassLoader().getResourceAsStream(path + ".md5");
-        ByteArrayOutputStream md5ByteStream = new ByteArrayOutputStream();
-        copyStream(md5Stream, md5ByteStream);
-        md5Stream.close();
+        var libByteStream = new ByteArrayOutputStream();
+        try (var libStream = requireNonNull(Booster.class.getClassLoader().getResourceAsStream(path))) {
+            copyStream(libStream, libByteStream);
+        }
+        var md5ByteStream = new ByteArrayOutputStream();
+        try (var md5Stream = requireNonNull(Booster.class.getClassLoader().getResourceAsStream(path + ".md5"))) {
+            copyStream(md5Stream, md5ByteStream);
+        }
         String expectedDigest = md5ByteStream.toString();
 
         try {
@@ -226,19 +224,19 @@ public class Booster
             target.write(buf, 0, length);
         }
 
-        LOGGER.info("Copied " + bytesCopied + " bytes");
+        LOGGER.info("Copied {} bytes", bytesCopied);
     }
 
-    public static Booster createFromModelFile(String file, int features) {
-        SWIGTYPE_p_p_void handle = lightgbmlib.new_voidpp();
-        SWIGTYPE_p_int outIterations = lightgbmlib.new_intp();
+    public static Booster createFromModelFile(String file) {
+        var handle = lightgbmlib.new_voidpp();
+        var outIterations = lightgbmlib.new_intp();
         int result = lightgbmlib.LGBM_BoosterCreateFromModelfile(file, outIterations, handle);
         if (result < 0) {
             throw new RuntimeException(lightgbmlib.LGBM_GetLastError());
         }
         int iterations = lightgbmlib.intp_value(outIterations);
         lightgbmlib.delete_intp(outIterations);
-        return new Booster(iterations, handle, features);
+        return new Booster(iterations, handle);
     }
 
     public void close() {
@@ -246,121 +244,43 @@ public class Booster
             return;
         }
         isClosed = true;
+        // TODO: close all stuff
         int result = lightgbmlib.LGBM_BoosterFree(lightgbmlib.voidpp_value(handle));
         if (result < 0) {
             throw new RuntimeException(lightgbmlib.LGBM_GetLastError());
         }
     }
 
-    public double[] predictForMat(
-        double[] input, int rows, int cols, boolean isRowMajor,
-        PredictionType predictionType, String parameter
-    ) throws LGBMException {
-        SWIGTYPE_p_double dataBuffer = lightgbmlib.new_doubleArray(input.length);
-
-        for (int i = 0; i < input.length; ++i) {
-            lightgbmlib.doubleArray_setitem(dataBuffer, i, input[i]);
-        }
-
-        SWIGTYPE_p_long_long outLength = lightgbmlib.new_int64_tp();
-        long outSize = this.outBufferSize(rows, cols, predictionType);
-        SWIGTYPE_p_double outBuffer = lightgbmlib.new_doubleArray(outSize);
-        int result = lightgbmlib.LGBM_BoosterPredictForMat(
-            lightgbmlib.voidpp_value(this.handle),
-            lightgbmlib.double_to_voidp_ptr(dataBuffer),
-            lightgbmlib.C_API_DTYPE_FLOAT64,
-            rows,
-            cols,
-            isRowMajor ? 1 : 0,
-            predictionType.getType(),
-            0,
-            this.iterations,
-            parameter,
-            outLength,
-            outBuffer);
-        if (result < 0) {
-            lightgbmlib.delete_doubleArray(dataBuffer);
-            lightgbmlib.delete_int64_tp(outLength);
-            lightgbmlib.delete_doubleArray(outBuffer);
-            throw new LGBMException(lightgbmlib.LGBM_GetLastError());
-        } else {
-            long length = lightgbmlib.int64_tp_value(outLength);
-            double[] values = new double[(int)length];
-
-            for (int i = 0; (long)i < length; ++i) {
-                values[i] = lightgbmlib.doubleArray_getitem(outBuffer, i);
-            }
-
-            lightgbmlib.delete_doubleArray(dataBuffer);
-            lightgbmlib.delete_int64_tp(outLength);
-            lightgbmlib.delete_doubleArray(outBuffer);
-            return values;
-        }
-    }
-
-    public String[] getFeatureNames() {
+    public String[] featureNames() {
         SWIGTYPE_p_void buffer = lightgbmlib.LGBM_BoosterGetFeatureNamesSWIG(lightgbmlib.voidpp_value(this.handle));
         String[] result = lightgbmlib.StringArrayHandle_get_strings(buffer);
         lightgbmlib.StringArrayHandle_free(buffer);
         return result;
     }
 
-    public int getNumFeature() throws LGBMException {
-        SWIGTYPE_p_int outNum = lightgbmlib.new_int32_tp();
-        int result = lightgbmlib.LGBM_BoosterGetNumFeature(lightgbmlib.voidpp_value(this.handle), outNum);
+    public int numFeatures() {
+        var outNum = lightgbmlib.new_int32_tp();
+        int result = lightgbmlib.LGBM_BoosterGetNumFeature(lightgbmlib.voidpp_value(handle), outNum);
         if (result < 0) {
             lightgbmlib.delete_intp(outNum);
-            throw new LGBMException(lightgbmlib.LGBM_GetLastError());
-        } else {
-            int num = lightgbmlib.intp_value(outNum);
-            lightgbmlib.delete_intp(outNum);
-            return num;
-        }
-    }
-
-    public double predictForMatSingleRow(double[] data, PredictionType predictionType) throws LGBMException {
-        for (int i = 0; i < data.length; ++i) {
-            lightgbmlib.doubleArray_setitem(inputBuffer, i, data[i]);
-        }
-        int result = lightgbmlib.LGBM_BoosterPredictForMatSingleRow(
-            handlePtr,
-            dataVoidPtr,
-            lightgbmlib.C_API_DTYPE_FLOAT64,
-            data.length,
-            1,
-            predictionType.getType(),
-            0,
-            iterations,
-            "",
-            outLength,
-            outputBuffer);
-        if (result < 0) {
-            throw new LGBMException(lightgbmlib.LGBM_GetLastError());
-        } else {
-            return lightgbmlib.doubleArray_getitem(outputBuffer, 0);
-        }
-    }
-
-    public double predictForMatSingleRowFast(double[] data) {
-        for (int i = 0; i < data.length; ++i) {
-            lightgbmlib.doubleArray_setitem(inputBuffer, i, data[i]);
-        }
-        int result = lightgbmlib.LGBM_BoosterPredictForMatSingleRowFast(
-            fastConfigHandle,
-            dataVoidPtr,
-            outLength,
-            outputBuffer);
-        if (result < 0) {
             throw new RuntimeException(lightgbmlib.LGBM_GetLastError());
-        } else {
-            return lightgbmlib.doubleArray_getitem(outputBuffer, 0);
         }
+        int num = lightgbmlib.intp_value(outNum);
+        lightgbmlib.delete_intp(outNum);
+        return num;
     }
 
-    public double predictForMatSingleRowUnsafe(double[] data) {
+    public double predict(double[] data) {
         for (int i = 0; i < data.length; ++i) {
-            inBuffer.putDouble(Double.BYTES * i, data[i]);
+            setFeatureValue(i, data[i]);
         }
+        return predict();
+    }
+
+    /**
+     * Make sure to set feature values via {@link #setFeatureValue} before calling this method.
+     */
+    public double predict() {
         int result = lightgbmlib.LGBM_BoosterPredictForMatSingleRowFast(
             fastConfigHandle,
             dataVoidPtr,
@@ -373,13 +293,7 @@ public class Booster
         }
     }
 
-    private long outBufferSize(int rows, int cols, PredictionType predictionType) {
-        long defaultSize = 2L * (long)rows;
-        if (PredictionType.C_API_PREDICT_CONTRIB.equals(predictionType)) {
-            return defaultSize * (long)(cols + 1);
-        } else {
-            return PredictionType.C_API_PREDICT_LEAF_INDEX.equals(predictionType) ?
-                defaultSize * (long)this.iterations : defaultSize;
-        }
+    public void setFeatureValue(int index, double value) {
+        inBuffer.putDouble(Double.BYTES * index, value);
     }
 }
