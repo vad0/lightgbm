@@ -11,6 +11,7 @@ repositories {
 }
 
 dependencies {
+    implementation("org.agrona:agrona:1.21.1")
     implementation("io.github.metarank:lightgbm4j:4.1.0-2")
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -30,8 +31,8 @@ jmh {
     jvmArgs.add("-Djmh.ignoreLock=true")
 //    includes.set(listOf("Write*"))
     fork = 1
-    warmupIterations = 5
-    iterations = 7
+    warmupIterations = 3
+    iterations = 5
     benchmarkMode.set(listOf("avgt"))
 //    benchmarkMode.set(listOf("all"))
     timeUnit = "us"
