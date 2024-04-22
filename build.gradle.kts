@@ -62,7 +62,7 @@ publishing {
         // MavenPublication must have, this is the task class to call
         create<MavenPublication>("maven") {
             // The header here is the artifacts configuration information, do not fill in the default
-            groupId = "gfjson"
+            groupId = "lightgbm"
             artifactId = "library"
             version = "1.1"
 
