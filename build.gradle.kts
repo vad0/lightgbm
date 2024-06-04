@@ -18,7 +18,7 @@ dependencies {
     implementation("org.agrona:agrona:1.21.1")
     implementation("org.apache.logging.log4j:log4j-core:3.0.0-beta2")
     implementation("org.apache.logging.log4j:log4j-slf4j-impl:3.0.0-beta2")
-    implementation("io.github.metarank:lightgbm4j:4.1.0-2")
+    implementation("io.github.metarank:lightgbm4j:4.3.0-1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
